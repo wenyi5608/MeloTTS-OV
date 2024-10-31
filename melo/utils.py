@@ -49,10 +49,12 @@ def get_text_for_tts_infer(text, language_str, hps, device, symbol_to_id=None, b
         bert = torch.zeros(1024, len(phone))
         ja_bert = torch.zeros(768, len(phone))
     else:
+        '''
         if use_ov:
             bert = get_ov_bert_feature(norm_text, word2ph, bert_model)
         else:
-            bert = get_bert(norm_text, word2ph, language_str, device)
+        '''
+        bert = get_bert(norm_text, word2ph, language_str, device)
         del word2ph
         assert bert.shape[-1] == len(phone), phone
 
