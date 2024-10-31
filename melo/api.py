@@ -26,6 +26,10 @@ from torch.utils.data import DataLoader
 import nncf
 import nltk 
 
+from nncf.quantization.advanced_parameters import OverflowFix
+from nncf.quantization.advanced_parameters import QuantizationParameters
+from nncf.quantization.advanced_parameters import AdvancedSmoothQuantParameters
+
 class ExportModel(PreTrainedModel):
     def __init__(self, base_model, config):
         super().__init__(config)
@@ -280,10 +284,12 @@ class TTS(nn.Module):
     @staticmethod
     def split_sentences_into_pieces(text, language, quiet=False):
         texts = split_sentence(text, language_str=language)
+        '''
         if not quiet:
             print(" > Text split to sentences.")
             print('\n'.join(texts))
             print(" > ===========================")
+        '''
         return texts
     
     def prepare_calibration_data(self, dataloader, init_steps):
@@ -407,8 +413,9 @@ class TTS(nn.Module):
                 calibration_dataset=calibration_dataset,
                 model_type=nncf.ModelType.TRANSFORMER,
                 subset_size=len(calibration_data),
-                # Smooth Quant algorithm reduces activation quantization error; optimal alpha value was obtained through grid search
+                # Smooth Quant algorithm reduces activation quantization error; optimal alpha value was obtained through grid search #overflow_fix=OverflowFix.ENABLE smooth_quant_alpha=0.6,
                 advanced_parameters=nncf.AdvancedQuantizationParameters(smooth_quant_alpha=0.6)
+                #advanced_parameters=nncf.AdvancedQuantizationParameters(smooth_quant_alphas=AdvancedSmoothQuantParameters(matmul=0.95, convolution=-1), activations_quantization_params=QuantizationParameters(num_bits=7))
             )
 
             ov.save_model(quantized_model, Path(f"{ov_path}/tts_int8_{language}.xml"))
@@ -425,6 +432,16 @@ class TTS(nn.Module):
         self.tts_model = self.core.read_model(Path(ov_model_path))
         self.tts_compiled_model = self.core.compile_model(self.tts_model, self.tts_device)
         self.tts_request = self.tts_compiled_model.create_infer_request()
+
+    def ov_model_init_nncf(self, model:ov.CompiledModel, language = "ZH"):
+        #self.bert_model.ov_bert_model_init("/home/qiu/TTS_OV/MeloTTS-OV/BERT", language=language)
+        print(type(model))
+        #breakpoint()
+        self.tts_compiled_model = model
+        self.tts_request = self.tts_compiled_model.create_infer_request()
+        if self.tts_request == None:
+            print("The model is not initialized, cannot create infer request.")
+            exit()
 
     def ov_infer(self, x_tst=None, x_tst_lengths=None, speakers=None, tones=None, lang_ids=None, bert=None, ja_bert=None, sdp_ratio=0.2, noise_scale=0.6, noise_scale_w=0.8, speed=1.0):
             inputs_dict = {}
@@ -450,6 +467,7 @@ class TTS(nn.Module):
         language = self.language
         texts = self.split_sentences_into_pieces(text, language, quiet)
         audio_list = []
+        '''
         if pbar:
             tx = pbar(texts)
         else:
@@ -460,6 +478,8 @@ class TTS(nn.Module):
             else:
                 tx = tqdm(texts)
         for t in tx:
+        '''
+        for t in texts:
             if language in ['EN', 'ZH_MIX_EN']:
                 t = re.sub(r'([a-z])([A-Z])', r'\1 \2', t)
             device = self.device
@@ -501,7 +521,6 @@ class TTS(nn.Module):
                             length_scale=1. / speed,
                         )[0][0, 0].data.cpu().float().numpy()
                 del x_tst, tones, lang_ids, bert, ja_bert, x_tst_lengths, speakers
-                # 
             audio_list.append(audio)
         torch.cuda.empty_cache()
         audio = self.audio_numpy_concat(audio_list, sr=self.hps.data.sampling_rate, speed=speed)
