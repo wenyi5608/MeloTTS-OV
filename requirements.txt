@@ -1,7 +1,8 @@
 txtsplit
 torch
 torchaudio
-cached_path
+cached_path>=1.6.2
+botocore>=1.34.98
 transformers==4.27.4
 num2words==0.5.12
 unidic_lite==1.0.8
